@@ -20,5 +20,8 @@ jobs:
       - name: Create Release Candidate or Publish
         id: changesets
         uses: changesets/action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           publish: pnpm run build
+      
