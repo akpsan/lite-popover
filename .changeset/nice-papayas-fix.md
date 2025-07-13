@@ -2,4 +2,4 @@
 "lite-popover": patch
 ---
 
-Add ping function
+Add ping function, repo setup
