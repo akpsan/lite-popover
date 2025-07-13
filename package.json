@@ -1,0 +1,18 @@
+{
+    "name": "lite-popover",
+    "license": "MIT",
+    "version": "0.0.1",
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "devDependencies": {
+        "@changesets/cli": "^2.29.5",
+        "tsup": "^8.5.0",
+        "typescript": "^5.8.3"
+    },
+    "scripts": {
+        "build": "tsup index.ts --format cjs,esm --dts",
+        "lint": "tsc",
+        "dev": "tsup --watch"
+    }
+}
