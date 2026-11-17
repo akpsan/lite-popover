@@ -1,13 +1,17 @@
 /* lite-popover base styles.
- * The popover is linked to its anchor via `anchor-name` / `position-anchor`
- * (set inline by createPopover). Placement comes from [data-placement],
- * the gap from the --offset custom property.
+ * createPopover links the popover to its anchor (anchor-name / position-anchor)
+ * and sets three things inline:
+ *   data-placement          preferred side
+ *   --offset                gap to the anchor
+ *   position-try-fallbacks  which @position-try rules below to try, in order
+ * The browser picks the first side that fits and keeps the popover inside the
+ * viewport on the other axis. No JS measuring.
  */
 .lite-popover {
-  /* reset the UA [popover] centering so anchor() insets apply */
-  margin: 0;
-  inset: auto;
+  /* reset the UA [popover] centering so position-area applies */
   position: fixed;
+  inset: auto;
+  margin: 0;
 
   background: var(--popover-bg, #fff);
   color: var(--popover-fg, inherit);
@@ -18,25 +22,41 @@
 }
 
 .lite-popover[data-placement="bottom"] {
-  top: anchor(bottom);
-  left: anchor(center);
-  translate: -50% var(--offset, 8px);
+  position-area: bottom;
+  margin-top: var(--offset, 8px);
 }
 
 .lite-popover[data-placement="top"] {
-  bottom: anchor(top);
-  left: anchor(center);
-  translate: -50% calc(-1 * var(--offset, 8px));
+  position-area: top;
+  margin-bottom: var(--offset, 8px);
 }
 
 .lite-popover[data-placement="left"] {
-  right: anchor(left);
-  top: anchor(center);
-  translate: calc(-1 * var(--offset, 8px)) -50%;
+  position-area: left;
+  margin-right: var(--offset, 8px);
 }
 
 .lite-popover[data-placement="right"] {
-  left: anchor(right);
-  top: anchor(center);
-  translate: var(--offset, 8px) -50%;
+  position-area: right;
+  margin-left: var(--offset, 8px);
+}
+
+@position-try --lite-popover-bottom {
+  position-area: bottom;
+  margin: var(--offset, 8px) 0 0 0;
+}
+
+@position-try --lite-popover-top {
+  position-area: top;
+  margin: 0 0 var(--offset, 8px) 0;
+}
+
+@position-try --lite-popover-left {
+  position-area: left;
+  margin: 0 var(--offset, 8px) 0 0;
+}
+
+@position-try --lite-popover-right {
+  position-area: right;
+  margin: 0 0 0 var(--offset, 8px);
 }

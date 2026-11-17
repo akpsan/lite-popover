@@ -1,6 +1,6 @@
 {
   "name": "lite-popover",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Tiny wrapper over the native Popover API + CSS Anchor Positioning",
   "license": "MIT",
   "author": "akpsan",
@@ -43,11 +43,21 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --minify --clean && cp src/style.css dist/style.css",
     "lint": "tsc",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
+    "test": "vitest run",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "demo": "vite demo",
+    "release": "pnpm run build && changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.5",
+    "@vitest/browser-playwright": "^5.1.0",
+    "playwright": "^1.65.1",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lite-popover demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; min-height: 200vh; }
+      header { padding: 1rem 9rem; }
+      #support { font-weight: 600; }
+      .corner { position: fixed; }
+      .tl { top: 1rem; left: 1rem; } .tr { top: 1rem; right: 1rem; }
+      .bl { bottom: 1rem; left: 1rem; } .br { bottom: 1rem; right: 1rem; }
+      .center { position: fixed; top: 50%; left: 50%; translate: -50% -50%; display: flex; gap: .5rem; }
+      .scroller { position: fixed; top: 6rem; left: 1rem; width: 14rem; height: 10rem; overflow: auto; border: 1px dashed #999; }
+      .scroller > div { height: 40rem; padding: 4rem 1rem; }
+      .tooltip { --popover-bg: #222; --popover-fg: #fff; --popover-border: transparent; font-size: .85rem; }
+      .menu { list-style: none; margin: 0; padding: 0; } .menu a { display: block; padding: .25rem 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span id="support"></span> — click the buttons, resize the window, scroll. Popovers flip and stay on screen.
+    </header>
+    <button class="corner tl">Top-left</button>
+    <button class="corner tr">Top-right</button>
+    <button class="corner bl">Bottom-left</button>
+    <button class="corner br">Bottom-right</button>
+    <div class="center">
+      <button data-placement="top">top</button>
+      <button data-placement="right">right</button>
+      <button data-placement="bottom">bottom</button>
+      <button data-placement="left">left</button>
+      <button id="tip">hover me</button>
+    </div>
+    <div class="scroller"><div><button>Inside a scroller</button></div></div>
+
+    <script type="module">
+      import { createPopover, isSupported } from "../src/index.ts";
+      import "../src/style.css";
+
+      document.querySelector("#support").textContent = isSupported()
+        ? "✅ Supported in this browser"
+        : "⚠️ Not supported here: popovers are inert, nothing breaks";
+
+      for (const btn of document.querySelectorAll("button:not(#tip)")) {
+        const p = createPopover(btn, { placement: btn.dataset.placement ?? "bottom" });
+        p.element.innerHTML = `<ul class="menu"><li><a href="#">Profile</a></li><li><a href="#">Settings</a></li><li><a href="#">A rather long menu item that needs room</a></li></ul>`;
+        btn.addEventListener("click", () => p.toggle());
+      }
+
+      const tipBtn = document.querySelector("#tip");
+      const tip = createPopover(tipBtn, { placement: "top", offset: 4 });
+      tip.element.classList.add("tooltip");
+      tip.element.textContent = "This is a tooltip";
+      tipBtn.addEventListener("mouseenter", () => tip.show());
+      tipBtn.addEventListener("mouseleave", () => tip.hide());
+    </script>
+  </body>
+</html>
