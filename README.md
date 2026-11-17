@@ -4,9 +4,10 @@ A lightweight, pragmatic popover library built on the native Popover API and CSS
 
 ## Why lite-popover?
 
-- **Tiny**: ~2KB minified, because your bundle size matters
-- **Modern**: Uses native browser APIs (Popover API + CSS Anchor Positioning)
-- **Smart**: Automatically finds the best placement when your preferred spot doesn't fit
+- **Tiny**: ~1KB gzipped, because your bundle size matters
+- **Native**: The browser does the work. The Popover API gives you the top layer and light dismiss (Esc, outside click); CSS Anchor Positioning places, flips and keeps the popover on screen. No JS measuring, no scroll listeners.
+- **Smart**: Flips to a fallback side when your preferred spot doesn't fit, and stays inside the viewport near edges
+- **Safe**: In browsers without support it quietly does nothing instead of breaking your app
 - **Zero dependencies**: No React, no jQuery, no drama
 - **TypeScript**: Fully typed for better DX
 
@@ -57,7 +58,8 @@ interface PopoverOptions {
   /** Gap between popover and anchor in pixels. Default: 8 */
   offset?: number;
 
-  /** Fallback placements when preferred doesn't fit. Default: the other three sides */
+  /** Placements the browser tries, in order, when the preferred one overflows.
+   *  Default: the other three sides. Pass [] to never flip. */
   fallbacks?: Placement[];
 }
 ```
@@ -67,13 +69,23 @@ interface PopoverOptions {
 ```typescript
 interface PopoverController {
   readonly element: HTMLElement; // The popover element
+  readonly supported: boolean; // false in unsupported browsers (see below)
   show(): void; // Show the popover
   hide(): void; // Hide the popover
   toggle(): void; // Toggle visibility
-  update(): void; // Recalculate position
-  destroy(): void; // Clean up everything
+  destroy(): void; // Remove the popover and restore the anchor
 }
 ```
+
+Positioning is live: the browser keeps the popover attached through scrolling, resizing and content changes, so there is no `update()` to call.
+
+### `isSupported()`
+
+Returns `true` when the browser has everything lite-popover needs. Safe to call during server rendering (returns `false`).
+
+### Accessibility
+
+The anchor gets `aria-controls` pointing at the popover and an `aria-expanded` that stays in sync, including when the popover is closed with Esc or an outside click. Both are restored on `destroy()`.
 
 ## Examples
 
@@ -114,7 +126,7 @@ menuButton.addEventListener("click", () => dropdown.toggle());
 ### Smart Positioning
 
 ```javascript
-// This will try 'right' first, then fall back to 'left', 'top', 'bottom'
+// Prefers 'right'; if it overflows, the browser tries 'left', then 'top', then 'bottom'
 const smartPopover = createPopover(element, {
   placement: "right",
   fallbacks: ["left", "top", "bottom"],
@@ -123,7 +135,7 @@ const smartPopover = createPopover(element, {
 
 ## CSS Styling
 
-Import the base styles (`lite-popover/style.css`) and override as needed. The popover gets the `lite-popover` class, a `data-placement` attribute with the side it actually landed on, and an `--offset` custom property:
+Import the base styles (`lite-popover/style.css`) and override as needed. The stylesheet is required: it holds the positioning rules. The popover gets the `lite-popover` class, a `data-placement` attribute with the preferred side, and an `--offset` custom property:
 
 ```css
 .lite-popover {
@@ -132,14 +144,25 @@ Import the base styles (`lite-popover/style.css`) and override as needed. The po
   --popover-border: transparent;
 }
 
-/* Style based on the resolved placement, e.g. for an arrow */
+/* Style based on the preferred placement */
 .lite-popover[data-placement="top"] {
 }
 ```
 
+Flipping happens in CSS, so `data-placement` is the side you asked for, not necessarily the side the browser chose.
+
 ## Browser Support
 
-Requires the Popover API and CSS Anchor Positioning (`anchor-name` / `position-anchor` / `anchor()`). Browsers without the Popover API fall back to a basic `display` show/hide; without anchor positioning the popover still opens but is not positioned next to its anchor.
+Requires the Popover API and CSS Anchor Positioning (`anchor-name`, `position-area`, `position-try-fallbacks`). See [caniuse: CSS Anchor Positioning](https://caniuse.com/css-anchor-positioning) for current support.
+
+lite-popover ships no polyfill. In browsers without support, `createPopover` still returns a controller, but it is inert: `show()`, `hide()`, `toggle()` and `destroy()` do nothing, the element is never added to the page, and the anchor is left untouched. Nothing throws and nothing renders in the wrong place. Use `isSupported()` or `popover.supported` if you want to show an alternative:
+
+```javascript
+const popover = createPopover(button);
+if (!popover.supported) {
+  button.title = "Profile, Settings, Logout"; // or link to a page, etc.
+}
+```
 
 ## Framework Integration
 
@@ -213,3 +236,12 @@ Found a bug? Want a feature? [Open an issue](https://github.com/akpsan/lite-popo
 ## License
 
 MIT © 2025
+
+## Development
+
+```bash
+pnpm install
+pnpm exec playwright install chromium   # once, for the browser tests
+pnpm test                               # unit + real-browser tests (Vitest)
+pnpm demo                               # interactive demo page
+```

@@ -1,103 +1,80 @@
 // lite-popover
 // Lightweight popover helper built on the native Popover API + CSS Anchor Positioning.
+// The browser does the work: top layer, light dismiss, positioning and flipping.
+// This file only wires an anchor to a popover and cleans up after itself.
 // MIT © 2025 — https://github.com/akpsan/lite-popover
 
-/*************************************************
- *              Public Types & API               *
- *************************************************/
 export type Placement = "top" | "bottom" | "left" | "right";
 
 export interface PopoverOptions {
-  /** Preferred placement. If it doesn't fit, we'll try others. Default: 'bottom' */
+  /** Preferred placement. Default: 'bottom' */
   placement?: Placement;
   /** Gap between popover and anchor, in px. Default: 8 */
   offset?: number;
-  /** Fallback order when preferred placement doesn't fit. Default: the other three sides */
+  /** Placements the browser tries, in order, when the preferred one overflows. Default: the other three sides */
   fallbacks?: Placement[];
 }
 
 export interface PopoverController {
+  /** The popover element. Put your content in here. */
   readonly element: HTMLElement;
+  /** False when the browser lacks the required APIs; show/hide/toggle then do nothing. */
+  readonly supported: boolean;
   show(): void;
   hide(): void;
   toggle(): void;
-  update(): void;
   destroy(): void;
 }
 
-/*************************************************
- *                 Helper utils                  *
- *************************************************/
-let anchorCounter = 0;
+const PLACEMENTS: Placement[] = ["top", "bottom", "right", "left"];
 
-function setPlacement(el: HTMLElement, placement: Placement) {
-  el.dataset.placement = placement;
-}
-
-function getScrollParents(el: HTMLElement): (HTMLElement | Window)[] {
-  const parents: (HTMLElement | Window)[] = [];
-  let current: HTMLElement | null = el.parentElement;
-
-  while (current && current !== document.documentElement) {
-    const style = getComputedStyle(current);
-    const overflow = style.overflow + style.overflowX + style.overflowY;
-    if (/auto|scroll|overlay/.test(overflow)) {
-      parents.push(current);
-    }
-    current = current.parentElement;
-  }
-
-  // Document scrolling fires on window, not on <html>.
-  parents.push(window);
-  return parents;
-}
-
-/*************************************************
- *            Simple placement logic             *
- *************************************************/
-function getAvailableSpace(anchor: HTMLElement, placement: Placement): number {
-  const rect = anchor.getBoundingClientRect();
-  switch (placement) {
-    case "top":
-      return rect.top;
-    case "bottom":
-      return window.innerHeight - rect.bottom;
-    case "left":
-      return rect.left;
-    case "right":
-      return window.innerWidth - rect.right;
-  }
-}
-
-function findBestPlacement(
-  anchor: HTMLElement,
-  popover: HTMLElement,
-  offset: number,
-  preferred: Placement,
-  fallbacks: Placement[]
-): Placement {
-  const fits = (p: Placement) => {
-    const required =
-      (p === "top" || p === "bottom" ? popover.offsetHeight : popover.offsetWidth) +
-      offset;
-    return getAvailableSpace(anchor, p) >= required;
-  };
-
-  const candidates = [preferred, ...fallbacks];
-  const firstFit = candidates.find(fits);
-  if (firstFit) return firstFit;
-
-  // Nothing fits, use the side with the most space.
-  return candidates.reduce((best, current) =>
-    getAvailableSpace(anchor, current) > getAvailableSpace(anchor, best)
-      ? current
-      : best
+/**
+ * True when the browser has the Popover API and CSS Anchor Positioning.
+ * Safe to call anywhere, including on the server (returns false).
+ */
+export function isSupported(): boolean {
+  return (
+    typeof HTMLElement !== "undefined" &&
+    "popover" in HTMLElement.prototype &&
+    typeof CSS !== "undefined" &&
+    typeof CSS.supports === "function" &&
+    CSS.supports("anchor-name: --a") &&
+    CSS.supports("position-area: top") &&
+    CSS.supports("position-try-fallbacks: --a")
   );
 }
 
-/*************************************************
- *                createPopover                  *
- *************************************************/
+let counter = 0;
+
+// anchor-name is a list, so several popovers (or the app's own CSS) can share an anchor.
+function addAnchorName(anchor: HTMLElement, name: string) {
+  const current = getComputedStyle(anchor).getPropertyValue("anchor-name").trim();
+  anchor.style.setProperty(
+    "anchor-name",
+    current && current !== "none" ? `${current}, ${name}` : name
+  );
+}
+
+function removeAnchorName(anchor: HTMLElement, name: string) {
+  const rest = anchor.style
+    .getPropertyValue("anchor-name")
+    .split(",")
+    .map((n) => n.trim())
+    .filter((n) => n && n !== name)
+    .join(", ");
+  // Drop the inline value entirely if the stylesheet alone now gives the same result.
+  anchor.style.removeProperty("anchor-name");
+  const base = getComputedStyle(anchor).getPropertyValue("anchor-name").trim();
+  if (rest && rest !== base) anchor.style.setProperty("anchor-name", rest);
+}
+
+function restoreAttr(el: HTMLElement, name: string, value: string | null) {
+  if (value === null) el.removeAttribute(name);
+  else el.setAttribute(name, value);
+}
+
+type ShowPopover = (options?: { source?: HTMLElement }) => void;
+
 export function createPopover(
   anchor: HTMLElement,
   opts: PopoverOptions = {}
@@ -105,96 +82,99 @@ export function createPopover(
   const {
     placement = "bottom",
     offset = 8,
-    fallbacks = (["top", "bottom", "right", "left"] as Placement[]).filter(
-      (p) => p !== placement
-    ),
+    fallbacks = PLACEMENTS.filter((p) => p !== placement),
   } = opts;
 
-  // Link popover to anchor with CSS Anchor Positioning.
-  const anchorName = `--lite-popover-${++anchorCounter}`;
-  const previousAnchorName = anchor.style.getPropertyValue("anchor-name");
-  anchor.style.setProperty("anchor-name", anchorName);
-
+  const id = ++counter;
   const popover = document.createElement("div");
-  popover.setAttribute("popover", "auto");
   popover.className = "lite-popover";
+  popover.id = `lite-popover-${id}`;
+  popover.dataset.placement = placement;
+
+  // Unsupported browser: hand back an inert controller. The element is never
+  // attached, so nothing renders unstyled or in the wrong place, and nothing throws.
+  if (!isSupported()) {
+    popover.hidden = true;
+    const noop = () => {};
+    return {
+      element: popover,
+      supported: false,
+      show: noop,
+      hide: noop,
+      toggle: noop,
+      destroy: noop,
+    };
+  }
+
+  const anchorName = `--lite-popover-${id}`;
+  const isOpen = () => popover.matches(":popover-open");
+  const prevControls = anchor.getAttribute("aria-controls");
+  const prevExpanded = anchor.getAttribute("aria-expanded");
+
+  addAnchorName(anchor, anchorName);
+  anchor.setAttribute("aria-controls", popover.id);
+  anchor.setAttribute("aria-expanded", "false");
+
+  popover.popover = "auto";
   popover.tabIndex = -1;
   popover.style.setProperty("position-anchor", anchorName);
   popover.style.setProperty("--offset", `${offset}px`);
-  setPlacement(popover, placement);
+  popover.style.setProperty(
+    "position-try-fallbacks",
+    fallbacks.map((p) => `--lite-popover-${p}`).join(", ") || "none"
+  );
+
+  // Fires for every open/close, including light dismiss (Esc, outside click).
+  const onToggle = (e: Event) => {
+    const open = (e as ToggleEvent).newState === "open";
+    anchor.setAttribute("aria-expanded", String(open));
+  };
+  popover.addEventListener("toggle", onToggle);
+
+  // Light dismiss closes the popover on pointerup, before the anchor's click
+  // handlers run, so toggle() on click would see "closed" and reopen it.
+  // Remember whether it was open when the press on the anchor started.
+  let openAtPress = false;
+  const onPress = () => {
+    openAtPress = isOpen();
+  };
+  const onClick = () => {
+    setTimeout(() => (openAtPress = false));
+  };
+  anchor.addEventListener("pointerdown", onPress);
+  anchor.addEventListener("click", onClick);
 
   document.body.appendChild(popover);
 
-  const supportsPopover = typeof popover.showPopover === "function";
-
-  const isOpen = () =>
-    supportsPopover
-      ? popover.matches(":popover-open")
-      : popover.style.display === "block";
-
-  function update() {
-    // Hidden popovers measure 0x0, so only re-place while open.
-    if (!isOpen()) return;
-    setPlacement(
-      popover,
-      findBestPlacement(anchor, popover, offset, placement, fallbacks)
-    );
-  }
-
   function show() {
-    if (supportsPopover) {
-      popover.showPopover();
-    } else {
-      popover.style.display = "block";
-    }
-    update();
+    if (!popover.isConnected || isOpen()) return;
+    // `source` makes the anchor the popover's invoker (accessibility tree, focus
+    // order). Browsers that don't know the option ignore it.
+    (popover.showPopover as ShowPopover).call(popover, { source: anchor });
   }
 
   function hide() {
-    if (supportsPopover) {
-      popover.hidePopover();
-    } else {
-      popover.style.display = "none";
-    }
+    if (isOpen()) popover.hidePopover();
   }
 
   function toggle() {
-    isOpen() ? hide() : show();
+    const wasOpen = isOpen() || openAtPress;
+    openAtPress = false;
+    if (wasOpen) hide();
+    else show();
   }
-
-  // Reactive updates
-  const resizeObserver = new ResizeObserver(update);
-  resizeObserver.observe(anchor);
-  resizeObserver.observe(popover);
-
-  const scrollParents = getScrollParents(anchor);
-  scrollParents.forEach((parent) =>
-    parent.addEventListener("scroll", update, { passive: true })
-  );
-  window.addEventListener("resize", update, { passive: true });
 
   function destroy() {
-    resizeObserver.disconnect();
-    scrollParents.forEach((parent) =>
-      parent.removeEventListener("scroll", update)
-    );
-    window.removeEventListener("resize", update);
-    if (anchor.style.getPropertyValue("anchor-name") === anchorName) {
-      if (previousAnchorName) {
-        anchor.style.setProperty("anchor-name", previousAnchorName);
-      } else {
-        anchor.style.removeProperty("anchor-name");
-      }
-    }
+    if (!popover.isConnected) return;
+    popover.removeEventListener("toggle", onToggle);
+    anchor.removeEventListener("pointerdown", onPress);
+    anchor.removeEventListener("click", onClick);
+    hide();
     popover.remove();
+    removeAnchorName(anchor, anchorName);
+    restoreAttr(anchor, "aria-controls", prevControls);
+    restoreAttr(anchor, "aria-expanded", prevExpanded);
   }
 
-  return {
-    element: popover,
-    show,
-    hide,
-    toggle,
-    update,
-    destroy,
-  };
+  return { element: popover, supported: true, show, hide, toggle, destroy };
 }
