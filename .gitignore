@@ -1,2 +1,33 @@
-node_modules
-dist
+# ───────────────────────────────
+#  Node / TypeScript project
+# ───────────────────────────────
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+.pnpm-store/
+
+# build output
+dist/
+*.tsbuildinfo
+*.d.ts.map
+
+# esbuild metafiles (if you ever enable them)
+*.meta.json
+
+# local tooling / IDE trash
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.env
+.env.*.local
+
+# coverage & test artifacts (if you add tests later)
+coverage/
+.nyc_output/
+
+# macOS / Windows noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
